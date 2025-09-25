@@ -1,0 +1,48 @@
+# Dependencias para el proyecto DenseNet de clasificación de radiografías de tórax
+# Instalar con: pip install -r requirements.txt
+
+# PyTorch y visión computacional
+torch>=1.12.0
+torchvision>=0.13.0
+torchaudio>=0.12.0
+
+# Procesamiento de imágenes y datos
+Pillow>=9.0.0
+opencv-python>=4.6.0
+numpy>=1.21.0
+pandas>=1.4.0
+
+# Visualización y análisis
+matplotlib>=3.5.0
+seaborn>=0.11.0
+plotly>=5.10.0
+
+# Machine Learning y métricas
+scikit-learn>=1.1.0
+scipy>=1.8.0
+
+# Progreso y utilidades
+tqdm>=4.64.0
+pathlib2>=2.3.7
+
+# Análisis de datos adicionales
+umap-learn>=0.5.3
+plotly>=5.10.0
+
+# Jupyter notebook (opcional, para análisis interactivo)
+jupyter>=1.0.0
+ipywidgets>=7.7.0
+
+# GUI y interfaz gráfica
+tkinter  # Incluido con Python por defecto
+pillow>=9.0.0  # Para procesamiento de imágenes en GUI
+
+# Manejo de archivos y configuración
+pyyaml>=6.0
+argparse
+
+# Para análisis de modelos (opcional)
+captum>=0.5.0  # Para interpretabilidad de modelos PyTorch
+
+# Nota: Si tienes GPU NVIDIA, instala PyTorch con soporte CUDA:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
