@@ -1,0 +1,13 @@
+{
+  "total_images": 1345,
+  "successful_predictions": 1345,
+  "failed_predictions": 0,
+  "chest_xray_count": 1345,
+  "other_count": 0,
+  "chest_xray_percentage": 100.0,
+  "other_percentage": 0.0,
+  "average_confidence": 0.9999392594103477,
+  "high_confidence_count": 1345,
+  "medium_confidence_count": 0,
+  "low_confidence_count": 0
+}

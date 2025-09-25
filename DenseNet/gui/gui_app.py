@@ -168,7 +168,7 @@ class ChestXrayGUI:
             relief="sunken",
             bd=2,
             width=600,
-            height=190
+            height=130
         )
         
         # Scrollbars

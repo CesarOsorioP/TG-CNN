@@ -34,7 +34,7 @@ jupyter>=1.0.0
 ipywidgets>=7.7.0
 
 # GUI y interfaz gráfica
-tkinter  # Incluido con Python por defecto
+
 pillow>=9.0.0  # Para procesamiento de imágenes en GUI
 
 # Manejo de archivos y configuración
