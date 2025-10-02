@@ -2,8 +2,6 @@
 Script de análisis y visualización para el modelo DenseNet entrenado.
 Incluye análisis de características, visualización de activaciones y métricas detalladas.
 
-Autor: Asistente AI
-Fecha: 2024
 """
 
 import torch

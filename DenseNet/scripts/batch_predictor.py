@@ -2,8 +2,6 @@
 Script para predicción en lote de grandes cantidades de imágenes.
 Procesa miles de imágenes automáticamente y genera reportes detallados.
 
-Autor: Asistente AI
-Fecha: 2024
 """
 
 import torch
