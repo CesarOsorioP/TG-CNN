@@ -2,8 +2,6 @@
 Script para ayudar a organizar y preparar los datos para el entrenamiento.
 Este script verifica la estructura de datos y proporciona estadísticas útiles.
 
-Autor: Asistente AI
-Fecha: 2024
 """
 
 import os

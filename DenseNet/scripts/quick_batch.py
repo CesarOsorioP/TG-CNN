@@ -2,8 +2,6 @@
 Script rápido para procesamiento en lote de imágenes.
 Versión simplificada para uso fácil y rápido.
 
-Autor: Asistente AI
-Fecha: 2024
 """
 
 import os

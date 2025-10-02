@@ -20,6 +20,7 @@
 .venv
 /scripts/PredicciónImágenes
 /data
+README.md
 
 npm-debug.log*
 yarn-debug.log*

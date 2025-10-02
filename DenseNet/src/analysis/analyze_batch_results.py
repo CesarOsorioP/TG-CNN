@@ -2,8 +2,6 @@
 Script para analizar resultados de procesamiento en lote.
 Genera reportes detallados y visualizaciones.
 
-Autor: Asistente AI
-Fecha: 2024
 """
 
 import json
