@@ -1,0 +1,26 @@
+# Dependencias específicas para el módulo multi-label
+# Estas dependencias se agregan a las del proyecto principal
+
+# Métricas adicionales para multi-label
+scikit-learn>=1.0.0
+
+# Visualización mejorada
+seaborn>=0.11.0
+
+# Procesamiento de datos
+pandas>=1.3.0
+
+# Optimizaciones adicionales
+numba>=0.56.0
+
+# Para análisis estadístico avanzado
+scipy>=1.7.0
+
+# Para manejo de arrays multidimensionales
+numpy>=1.21.0
+
+# Para visualizaciones interactivas (opcional)
+plotly>=5.0.0
+
+# Para análisis de rendimiento (opcional)
+memory-profiler>=0.60.0

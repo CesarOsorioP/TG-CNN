@@ -427,7 +427,8 @@ class ChestXrayGUI:
                     else:
                         self.root.after(0, self.on_model_loaded_error)
                 except Exception as e:
-                    self.root.after(0, lambda: self.on_model_loaded_error(str(e)))
+                    error_msg = str(e)
+                    self.root.after(0, lambda: self.on_model_loaded_error(error_msg))
             
             threading.Thread(target=load_in_thread, daemon=True).start()
             
@@ -614,7 +615,8 @@ Clases: {list(self.predictor.idx_to_class.values())}"""
                     )
                     self.root.after(0, lambda: self.on_prediction_complete(result))
                 except Exception as e:
-                    self.root.after(0, lambda: self.on_prediction_error(str(e)))
+                    error_msg = str(e)
+                    self.root.after(0, lambda: self.on_prediction_error(error_msg))
             
             threading.Thread(target=predict_in_thread, daemon=True).start()
             
