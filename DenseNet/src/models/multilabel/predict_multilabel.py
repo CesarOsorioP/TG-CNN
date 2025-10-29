@@ -24,20 +24,23 @@ class MultiLabelDiseasePredictor:
     Clase para realizar predicciones con el modelo multi-label entrenado.
     """
     
-    def __init__(self, model_path, device=None, threshold=0.5):
+    def __init__(self, model_path, device=None, threshold=None, use_adaptive_thresholds=True):
         """
         Inicializar el predictor multi-label.
         
         Args:
             model_path: Ruta al archivo del modelo guardado (.pth)
             device: Dispositivo a usar ('cuda', 'cpu', o None para auto-detectar)
-            threshold: Umbral para considerar enfermedad presente
+            threshold: Umbral para considerar enfermedad presente (si es None, usa umbrales adaptativos)
+            use_adaptive_thresholds: Si usar umbrales adaptativos cargados del modelo
         """
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.threshold = threshold
+        self.use_adaptive_thresholds = use_adaptive_thresholds
         self.model = None
         self.disease_names = None
         self.num_diseases = None
+        self.optimal_thresholds = None
         self.transform = None
         
         # Cargar modelo
@@ -45,6 +48,14 @@ class MultiLabelDiseasePredictor:
         
         # Configurar transformaciones
         self._setup_transforms()
+        
+        # Mostrar configuración de umbrales
+        if self.optimal_thresholds:
+            print("\n📊 Umbrales adaptativos cargados:")
+            for disease, threshold in self.optimal_thresholds.items():
+                print(f"   {disease}: {threshold:.3f}")
+        else:
+            print(f"\n⚠️  Usando threshold fijo: {self.threshold}")
     
     def _load_model(self, model_path):
         """Cargar el modelo multi-label entrenado."""
@@ -60,6 +71,16 @@ class MultiLabelDiseasePredictor:
         self.disease_names = checkpoint['disease_names']
         self.num_diseases = checkpoint['num_diseases']
         
+        # Cargar umbrales óptimos si existen
+        if 'optimal_thresholds' in checkpoint and self.use_adaptive_thresholds:
+            self.optimal_thresholds = checkpoint['optimal_thresholds']
+            self.threshold = None  # Se usará umbral adaptativo
+            print(f"📊 Umbrales adaptativos disponibles para {len(self.optimal_thresholds)} enfermedades")
+        else:
+            if self.threshold is None:
+                self.threshold = 0.5  # Valor por defecto
+            print(f"⚠️  Umbrales adaptativos no encontrados, usando threshold fijo: {self.threshold}")
+        
         # Crear modelo
         self.model = DenseNetMultiLabelClassifier(
             num_diseases=self.num_diseases,
@@ -71,7 +92,6 @@ class MultiLabelDiseasePredictor:
         
         print(f"✅ Modelo cargado exitosamente en dispositivo: {self.device}")
         print(f"📊 Enfermedades disponibles: {self.disease_names}")
-        print(f"🎯 Umbral de detección: {self.threshold}")
     
     def _setup_transforms(self):
         """Configurar transformaciones para las imágenes."""
@@ -81,6 +101,37 @@ class MultiLabelDiseasePredictor:
             transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                                std=[0.229, 0.224, 0.225])
         ])
+    
+    def _apply_thresholds(self, probabilities):
+        """
+        Aplicar umbrales adaptativos o fijo a las probabilidades.
+        
+        Args:
+            probabilities: Tensor o array con probabilidades
+            
+        Returns:
+            numpy array: Predicciones binarias
+        """
+        # Convertir a numpy si es tensor
+        if isinstance(probabilities, torch.Tensor):
+            probs = probabilities.cpu().numpy()
+            if probs.ndim == 2:
+                probs = probs[0]
+        else:
+            probs = probabilities
+            if probs.ndim == 2:
+                probs = probs[0]
+        
+        # Aplicar umbrales adaptativos si están disponibles
+        if self.optimal_thresholds is not None:
+            predictions = np.zeros_like(probs, dtype=int)
+            for i, disease in enumerate(self.disease_names):
+                threshold = self.optimal_thresholds.get(disease, 0.5)
+                predictions[i] = 1 if probs[i] > threshold else 0
+            return predictions
+        else:
+            # Usar threshold fijo
+            return (probs > self.threshold).astype(int)
     
     def predict_single_image(self, image_path, return_probabilities=True):
         """
@@ -103,11 +154,12 @@ class MultiLabelDiseasePredictor:
         # Realizar predicción
         with torch.no_grad():
             probabilities = self.model(input_tensor)
-            predictions = (probabilities > self.threshold).float()
         
-        # Convertir a numpy
+        # Aplicar umbrales adaptativos o fijo
+        predictions = self._apply_thresholds(probabilities)
+        
+        # Convertir probabilidades a numpy
         probabilities = probabilities.cpu().numpy()[0]
-        predictions = predictions.cpu().numpy()[0]
         
         # Identificar enfermedades detectadas
         detected_diseases = []

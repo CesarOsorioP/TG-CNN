@@ -17,11 +17,95 @@ from datetime import datetime
 from tqdm import tqdm
 import argparse
 from pathlib import Path
+from sklearn.metrics import roc_curve, f1_score
 
 # Importar módulos del proyecto
 from dataset import create_data_loaders
 from model import create_model, create_loss_function
 from metrics import MultiLabelMetrics, evaluate_model_multi_label
+
+
+def calculate_optimal_thresholds(model, val_loader, disease_names, device):
+    """
+    Calcular umbrales óptimos para cada enfermedad usando curva ROC e índice de Youden.
+    
+    Args:
+        model: Modelo entrenado
+        val_loader: DataLoader de validación
+        disease_names: Lista de nombres de enfermedades
+        device: Dispositivo a usar
+        
+    Returns:
+        dict: Umbrales óptimos por enfermedad
+    """
+    print("\n" + "="*60)
+    print("🎯 CALCULANDO UMBRALES ÓPTIMOS POR ENFERMEDAD")
+    print("="*60)
+    
+    all_predictions = []
+    all_targets = []
+    
+    model.eval()
+    with torch.no_grad():
+        for data, target in tqdm(val_loader, desc="Calculando umbrales óptimos"):
+            data, target = data.to(device), target.to(device)
+            
+            output = model(data)
+            
+            all_predictions.append(output.cpu().numpy())
+            all_targets.append(target.cpu().numpy())
+    
+    # Concatenar todos los resultados
+    all_predictions = np.concatenate(all_predictions, axis=0)
+    all_targets = np.concatenate(all_targets, axis=0)
+    
+    optimal_thresholds = {}
+    thresholds_comparison = {}
+    
+    for i, disease in enumerate(disease_names):
+        y_true = all_targets[:, i]
+        y_scores = all_predictions[:, i]
+        
+        # Calcular curva ROC
+        fpr, tpr, thresholds_roc = roc_curve(y_true, y_scores)
+        
+        # Calcular índice de Youden (maximizar TPR - FPR)
+        j_scores = tpr - fpr
+        optimal_idx = np.argmax(j_scores)
+        optimal_threshold = thresholds_roc[optimal_idx]
+        
+        # Asegurar que el umbral esté en un rango razonable [0.1, 0.9]
+        optimal_threshold = np.clip(optimal_threshold, 0.1, 0.9)
+        
+        optimal_thresholds[disease] = float(optimal_threshold)
+        
+        # Calcular métricas con umbral óptimo vs fijo 0.5
+        pred_optimal = (y_scores > optimal_threshold).astype(int)
+        pred_fixed = (y_scores > 0.5).astype(int)
+        
+        f1_optimal = f1_score(y_true, pred_optimal, zero_division=0)
+        f1_fixed = f1_score(y_true, pred_fixed, zero_division=0)
+        
+        thresholds_comparison[disease] = {
+            'optimal_threshold': float(optimal_threshold),
+            'fixed_threshold': 0.5,
+            'f1_optimal': float(f1_optimal),
+            'f1_fixed': float(f1_fixed),
+            'improvement': float((f1_optimal - f1_fixed) * 100)
+        }
+        
+        print(f"\n{disease}:")
+        print(f"  Threshold óptimo: {optimal_threshold:.3f}")
+        print(f"  F1 con threshold óptimo: {f1_optimal:.3f}")
+        print(f"  F1 con threshold 0.5: {f1_fixed:.3f}")
+        
+        if f1_fixed > 0:
+            improvement_pct = ((f1_optimal - f1_fixed) / f1_fixed) * 100
+            print(f"  Mejora: {improvement_pct:+.1f}%")
+        else:
+            print(f"  Mejora: Mejora significativa (antes no detectaba)")
+    
+    return optimal_thresholds, thresholds_comparison
 
 def get_transforms():
     """
@@ -189,7 +273,15 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate,
     
     # Configurar optimizador
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+    
+    # Configurar scheduler: ReduceLROnPlateau es más adaptativo
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode='max',           # Monitorea F1 (maximizar)
+        factor=0.5,           # Reduce a la mitad (más suave)
+        patience=5,           # Espera 5 épocas sin mejora
+        min_lr=1e-6           # LR mínimo
+    )
     
     # Historial de entrenamiento
     history = {
@@ -206,8 +298,9 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate,
     
     best_val_f1 = 0.0
     best_model_state = None
-    patience = 3
+    patience = 10  # Aumentado para mejor convergencia
     patience_counter = 0
+    min_delta = 0.001  # Mejora mínima del 0.1% en F1
     
     print(f"🚀 Iniciando entrenamiento multi-label...")
     print(f"📊 Épocas: {num_epochs}")
@@ -244,22 +337,23 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate,
         print(f"  Hamming Loss: {val_metrics['hamming_loss']:.4f}")
         print(f"  Exact Match: {val_metrics['exact_match']:.4f}")
         
-        # Guardar mejor modelo
-        if val_metrics['f1_macro'] > best_val_f1:
+        # Guardar mejor modelo (con mejora mínima)
+        if val_metrics['f1_macro'] > best_val_f1 + min_delta:
             best_val_f1 = val_metrics['f1_macro']
             best_model_state = model.state_dict().copy()
             patience_counter = 0
             print(f"  ✅ ¡Nuevo mejor modelo! F1-Macro: {best_val_f1:.4f}")
         else:
             patience_counter += 1
-            print(f"  ⏳ Sin mejora ({patience_counter}/{patience})")
+            print(f"  ⏳ Sin mejora significativa ({patience_counter}/{patience})")
+        
+        # Actualizar scheduler (ReduceLROnPlateau necesita el valor a monitorear)
+        scheduler.step(val_metrics['f1_macro'])
         
         # Early stopping
         if patience_counter >= patience:
             print(f"\n🛑 Early stopping activado después de {patience} épocas sin mejora")
             break
-        
-        scheduler.step()
     
     # Cargar mejor modelo
     if best_model_state is not None:
@@ -348,16 +442,17 @@ def main():
                        help='Directorio con datos multi-label')
     parser.add_argument('--batch_size', type=int, default=16,
                        help='Tamaño del lote')
-    parser.add_argument('--num_epochs', type=int, default=20,
+    parser.add_argument('--num_epochs', type=int, default=25,
                        help='Número de épocas')
-    parser.add_argument('--learning_rate', type=float, default=0.001,
-                       help='Tasa de aprendizaje')
+    parser.add_argument('--learning_rate', type=float, default=0.0005,
+                       help='Tasa de aprendizaje para backbone congelado')
     parser.add_argument('--freeze_backbone', action='store_true', default=True,
                        help='Congelar backbone durante entrenamiento')
-    parser.add_argument('--fine_tune_epochs', type=int, default=5,
+    parser.add_argument('--fine_tune_epochs', type=int, default=8,
                        help='Épocas de fine-tuning')
-    parser.add_argument('--loss_type', type=str, default='bce',
-                       choices=['bce', 'focal', 'weighted_bce'],
+    parser.add_argument('--fine_tune_lr', type=float, default=0.00005,
+                       help='Tasa de aprendizaje para fine-tuning')
+    parser.add_argument('--loss_type', type=str, default='focal',
                        help='Tipo de función de pérdida')
     parser.add_argument('--device', type=str, default='auto',
                        choices=['auto', 'cuda', 'cpu'],
@@ -462,9 +557,9 @@ def main():
             print(f"\n🔓 Iniciando fine-tuning...")
             model.unfreeze_backbone()
             
-            # Reducir learning rate para fine-tuning
-            fine_tune_lr = args.learning_rate * 0.1
-            print(f"📈 Learning rate reducido a: {fine_tune_lr}")
+            # Usar learning rate específico para fine-tuning
+            fine_tune_lr = args.fine_tune_lr
+            print(f"📈 Learning rate para fine-tuning: {fine_tune_lr}")
             
             # Re-crear DataLoaders para fine-tuning con batch_size fijo de 8
             print(f"🔁 Re-creando DataLoaders para fine-tuning con batch_size=8 ...")
@@ -493,16 +588,7 @@ def main():
             for key in history:
                 history[key].extend(fine_tune_history[key])
             
-            # Guardar checkpoint POST fine-tuning adicional
-            post_ft_path = os.path.join(args.output_dir, 'densenet_multilabel_post_ft.pth')
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'disease_names': disease_names,
-                'num_diseases': len(disease_names),
-                'history': history,
-                'config': vars(args)
-            }, post_ft_path)
-            print(f"💾 Checkpoint post fine-tuning guardado en: {post_ft_path}")
+            print(f"✅ Fine-tuning completado")
         except Exception as e:
             print(f"\n⚠️ Fine-tuning detenido por error: {e}")
             print(f"Se conserva el checkpoint pre fine-tuning en: {pre_ft_path}")
@@ -510,25 +596,33 @@ def main():
     # Crear directorio de salida
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Guardar modelo
+    # CALCULAR UMBRALES ÓPTIMOS antes de guardar
+    print(f"\n🎯 Calculando umbrales óptimos para cada enfermedad...")
+    optimal_thresholds, thresholds_comparison = calculate_optimal_thresholds(
+        model, val_loader, disease_names, device
+    )
+    
+    # Guardar modelo CON umbrales óptimos
     model_path = os.path.join(args.output_dir, 'densenet_multilabel_model.pth')
     torch.save({
         'model_state_dict': model.state_dict(),
         'disease_names': disease_names,
         'num_diseases': len(disease_names),
+        'optimal_thresholds': optimal_thresholds,  # NUEVO
+        'thresholds_comparison': thresholds_comparison,  # NUEVO
         'history': history,
         'config': vars(args)
     }, model_path)
-    print(f"\n💾 Modelo guardado en: {model_path}")
+    print(f"\n💾 Modelo guardado con umbrales óptimos en: {model_path}")
     
     # Visualizar historial de entrenamiento
     plot_path = os.path.join(args.output_dir, 'training_history.png')
     plot_training_history(history, plot_path)
     
-    # Evaluar en conjunto de prueba
-    print(f"\n📊 Evaluando en conjunto de prueba...")
+    # Evaluar en conjunto de prueba con umbrales óptimos
+    print(f"\n📊 Evaluando en conjunto de prueba con umbrales adaptativos...")
     test_metrics, test_predictions, test_targets, test_probabilities = evaluate_model_multi_label(
-        model, test_loader, disease_names, device
+        model, test_loader, disease_names, device, optimal_thresholds=optimal_thresholds
     )
     
     # Imprimir métricas de prueba
@@ -548,6 +642,8 @@ def main():
         'disease_names': disease_names,
         'dataset_stats': dataset_stats,
         'test_metrics': test_metrics,
+        'optimal_thresholds': optimal_thresholds,  # NUEVO
+        'thresholds_comparison': thresholds_comparison,  # NUEVO
         'timestamp': datetime.now().isoformat()
     }
     

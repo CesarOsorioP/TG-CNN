@@ -306,7 +306,7 @@ class MultiLabelMetrics:
         
         plt.show()
 
-def evaluate_model_multi_label(model, data_loader, disease_names, device='cuda', threshold=0.5):
+def evaluate_model_multi_label(model, data_loader, disease_names, device='cuda', threshold=0.5, optimal_thresholds=None):
     """
     Evaluar modelo multi-label en un DataLoader.
     
@@ -315,7 +315,8 @@ def evaluate_model_multi_label(model, data_loader, disease_names, device='cuda',
         data_loader: DataLoader con datos de prueba
         disease_names: Lista de nombres de enfermedades
         device: Dispositivo a usar
-        threshold: Umbral para predicciones binarias
+        threshold: Umbral fijo para predicciones binarias (si optimal_thresholds es None)
+        optimal_thresholds: Diccionario con umbrales óptimos por enfermedad
         
     Returns:
         dict: Métricas de evaluación
@@ -326,6 +327,10 @@ def evaluate_model_multi_label(model, data_loader, disease_names, device='cuda',
     all_probabilities = []
     
     print("🔄 Evaluando modelo multi-label...")
+    if optimal_thresholds is not None:
+        print("📊 Usando umbrales adaptativos")
+    else:
+        print(f"📊 Usando threshold fijo: {threshold}")
     
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(data_loader):
@@ -333,7 +338,17 @@ def evaluate_model_multi_label(model, data_loader, disease_names, device='cuda',
             
             # Obtener predicciones
             probabilities = model(data)
-            predictions = (probabilities > threshold).float()
+            
+            # Aplicar umbrales adaptativos o fijo
+            if optimal_thresholds is not None:
+                # Usar umbrales adaptativos
+                predictions = torch.zeros_like(probabilities)
+                for i, disease in enumerate(disease_names):
+                    disease_threshold = optimal_thresholds.get(disease, threshold)
+                    predictions[:, i] = (probabilities[:, i] > disease_threshold).float()
+            else:
+                # Usar threshold fijo
+                predictions = (probabilities > threshold).float()
             
             all_predictions.append(predictions.cpu())
             all_targets.append(target.cpu())
@@ -345,7 +360,9 @@ def evaluate_model_multi_label(model, data_loader, disease_names, device='cuda',
     all_probabilities = torch.cat(all_probabilities, dim=0).numpy()
     
     # Calcular métricas
-    metrics_calculator = MultiLabelMetrics(disease_names, threshold)
+    # Usar el threshold apropiado para el objeto Metrics
+    used_threshold = threshold if optimal_thresholds is None else optimal_thresholds
+    metrics_calculator = MultiLabelMetrics(disease_names, used_threshold)
     metrics = metrics_calculator.calculate_metrics(
         all_targets, all_predictions, all_probabilities
     )

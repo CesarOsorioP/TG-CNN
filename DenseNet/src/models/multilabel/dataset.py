@@ -51,8 +51,6 @@ class MultiLabelChestXrayDataset(Dataset):
             'Normal'
         ]
         
-        if include_normal:
-            self.disease_names.append('Normal')
         
         # Crear mapeo de enfermedades
         self.disease_to_idx = {disease: i for i, disease in enumerate(self.disease_names)}
