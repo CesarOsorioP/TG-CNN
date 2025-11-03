@@ -56,7 +56,7 @@ def check_requirements():
     
     # Verificar archivos de datos
     data_diseases = Path('data_diseases')
-    disease_folders = ['Neumonía', 'Cáncer', 'Atelectasia', 'Edema', 'Tuberculosis', 'COVID-19']
+    disease_folders = ['Neumonía', 'Atelectasia', 'Edema', 'Tuberculosis', 'COVID-19', 'Normal', 'Nodules', 'Mass']
     
     missing_diseases = []
     for disease in disease_folders:
@@ -87,11 +87,13 @@ def demonstrate_data_preparation():
     print("\n📁 Estructura resultante:")
     print("   data_diseases/")
     print("   ├── Neumonía/        # Imágenes con neumonía")
-    print("   ├── Cáncer/          # Imágenes con cáncer")
     print("   ├── Atelectasia/     # Imágenes con atelectasia")
     print("   ├── Edema/           # Imágenes con edema")
     print("   ├── Tuberculosis/    # Imágenes con tuberculosis")
-    print("   └── COVID-19/        # Imágenes con COVID-19")
+    print("   ├── COVID-19/        # Imágenes con COVID-19")
+    print("   ├── Normal/          # Imágenes normales")
+    print("   ├── Nodules/         # Imágenes con nódulos")
+    print("   └── Mass/            # Imágenes con masas")
 
 def demonstrate_training():
     """Demostrar entrenamiento del modelo."""

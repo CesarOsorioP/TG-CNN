@@ -160,7 +160,7 @@ def show_system_info():
     print("="*50)
     
     print("\n🏥 Enfermedades soportadas:")
-    diseases = ['Neumonía', 'Cáncer', 'Atelectasia', 'Edema', 'Tuberculosis', 'COVID-19']
+    diseases = ['Neumonía', 'Atelectasia', 'Edema', 'Tuberculosis', 'COVID-19', 'Normal', 'Nodules', 'Mass']
     for i, disease in enumerate(diseases, 1):
         print(f"  {i}. {disease}")
     

@@ -18,11 +18,12 @@ class MultiLabelChestXrayDataset(Dataset):
     Estructura esperada:
     data_diseases/
     ├── Neumonía/        # Imágenes con neumonía
-    ├── Cáncer/          # Imágenes con cáncer
     ├── Atelectasia/     # Imágenes con atelectasia
     ├── Edema/           # Imágenes con edema
     ├── Tuberculosis/    # Imágenes con tuberculosis
-    └── COVID-19/        # Imágenes con COVID-19
+    ├── COVID-19/        # Imágenes con COVID-19
+    ├── Nodules/         # Imágenes con nódulos
+    └── Mass/            # Imágenes con masas
     """
     
     def __init__(self, data_dir, transform=None, include_normal=True, split='train'):
@@ -43,12 +44,13 @@ class MultiLabelChestXrayDataset(Dataset):
         # Definir enfermedades (incluyendo Normal)
         self.disease_names = [
             'Neumonía',
-            'Cáncer', 
             'Atelectasia',
             'Edema',
             'Tuberculosis',
             'COVID-19',
-            'Normal'
+            'Normal',
+            'Nodules',
+            'Mass'
         ]
         
         

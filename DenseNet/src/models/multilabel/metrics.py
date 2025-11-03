@@ -375,8 +375,8 @@ if __name__ == "__main__":
     
     # Crear datos de ejemplo
     n_samples = 100
-    n_diseases = 6
-    disease_names = ['Neumonía', 'Cáncer', 'Atelectasia', 'Edema', 'Tuberculosis', 'COVID-19']
+    n_diseases = 8
+    disease_names = ['Neumonía', 'Atelectasia', 'Edema', 'Tuberculosis', 'COVID-19', 'Normal', 'Nodules', 'Mass']
     
     # Generar etiquetas y predicciones aleatorias
     y_true = np.random.randint(0, 2, (n_samples, n_diseases))

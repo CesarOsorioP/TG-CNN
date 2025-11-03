@@ -500,8 +500,8 @@ def main():
     
     # Definir nombres de enfermedades (incluyendo Normal)
     disease_names = [
-        'Neumonía', 'Cáncer', 'Atelectasia', 
-        'Edema', 'Tuberculosis', 'COVID-19', 'Normal'
+        'Neumonía', 'Atelectasia', 'Edema', 
+        'Tuberculosis', 'COVID-19', 'Normal', 'Nodules', 'Mass'
     ]
     
     # Crear modelo
