@@ -1,0 +1,47 @@
+{
+  "total_diseases": 8,
+  "diseases": {
+    "Neumonía": {
+      "expected_files": 3000,
+      "actual_files": 0,
+      "directory": "data_diseases\\Neumonía"
+    },
+    "Atelectasia": {
+      "expected_files": 2999,
+      "actual_files": 0,
+      "directory": "data_diseases\\Atelectasia"
+    },
+    "Edema": {
+      "expected_files": 2628,
+      "actual_files": 0,
+      "directory": "data_diseases\\Edema"
+    },
+    "Tuberculosis": {
+      "expected_files": 2825,
+      "actual_files": 0,
+      "directory": "data_diseases\\Tuberculosis"
+    },
+    "COVID-19": {
+      "expected_files": 3000,
+      "actual_files": 0,
+      "directory": "data_diseases\\COVID-19"
+    },
+    "Normal": {
+      "expected_files": 3000,
+      "actual_files": 0,
+      "directory": "data_diseases\\Normal"
+    },
+    "Nodules": {
+      "expected_files": 2705,
+      "actual_files": 0,
+      "directory": "data_diseases\\Nodules"
+    },
+    "Mass": {
+      "expected_files": 2139,
+      "actual_files": 0,
+      "directory": "data_diseases\\Mass"
+    }
+  },
+  "total_images": 0,
+  "preparation_timestamp": "C:\\Users\\Cesar\\Desktop\\Trabajo Grado\\TG-CNN\\DenseNet"
+}

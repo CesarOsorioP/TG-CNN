@@ -20,13 +20,14 @@ def create_disease_directories(base_dir):
         base_dir: Directorio base donde crear las carpetas
     """
     diseases = [
-        'Neumonía',
-        'Cáncer', 
+        'Neumonía', 
         'Atelectasia',
         'Edema',
         'Tuberculosis',
         'COVID-19',
-        'Normal'
+        'Normal',
+        'Nodules',
+        'Mass'
     ]
     
     for disease in diseases:
@@ -221,12 +222,13 @@ def main():
     # Mapeo de carpetas fuente a nombres de enfermedades
     disease_mapping = {
         'Neumonía': 'Neumonía',
-        'Cancer': 'Cáncer',
         'Atelectasia': 'Atelectasia', 
         'Edema': 'Edema',
         'Tuberculosis': 'Tuberculosis',
         'Covid-19': 'COVID-19',
-        'Normal': 'Normal'
+        'Normal': 'Normal',
+        'Nodules': 'Nodules',
+        'Mass': 'Mass'
     }
     
     # Crear directorios de enfermedades
