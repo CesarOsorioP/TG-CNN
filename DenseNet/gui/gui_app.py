@@ -2,8 +2,6 @@
 GUI moderna para predicción de radiografías de tórax con DenseNet
 Interfaz gráfica intuitiva para cargar modelos y hacer predicciones
 
-Autor: Asistente AI
-Fecha: 2024
 """
 
 import tkinter as tk

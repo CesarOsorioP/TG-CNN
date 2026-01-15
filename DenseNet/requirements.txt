@@ -44,5 +44,5 @@ argparse
 # Para análisis de modelos (opcional)
 captum>=0.5.0  # Para interpretabilidad de modelos PyTorch
 
-# Nota: Si tienes GPU NVIDIA, instala PyTorch con soporte CUDA:
+
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
