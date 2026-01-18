@@ -24,6 +24,13 @@ from dataset import create_data_loaders
 from model import create_model, create_loss_function
 from metrics import MultiLabelMetrics, evaluate_model_multi_label
 
+# Intentar importar DirectML para GPUs AMD
+try:
+    import torch_directml
+    DML_AVAILABLE = True
+except ImportError:
+    DML_AVAILABLE = False
+
 
 def calculate_optimal_thresholds(model, val_loader, disease_names, device):
     """
@@ -115,7 +122,7 @@ def get_transforms():
         tuple: (train_transform, val_transform)
     """
     train_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((320, 320)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(10),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
@@ -126,7 +133,7 @@ def get_transforms():
     ])
     
     val_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((320, 320)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                            std=[0.229, 0.224, 0.225])
@@ -298,7 +305,7 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate,
     
     best_val_f1 = 0.0
     best_model_state = None
-    patience = 10  # Aumentado para mejor convergencia
+    patience = 5  # Ajustado según recomendación para evitar overfitting
     patience_counter = 0
     min_delta = 0.001  # Mejora mínima del 0.1% en F1
     
@@ -442,21 +449,21 @@ def main():
                        help='Directorio con datos multi-label')
     parser.add_argument('--batch_size', type=int, default=16,
                        help='Tamaño del lote')
-    parser.add_argument('--num_epochs', type=int, default=25,
+    parser.add_argument('--num_epochs', type=int, default=15,
                        help='Número de épocas')
-    parser.add_argument('--learning_rate', type=float, default=0.0005,
+    parser.add_argument('--learning_rate', type=float, default=0.0003,
                        help='Tasa de aprendizaje para backbone congelado')
     parser.add_argument('--freeze_backbone', action='store_true', default=True,
                        help='Congelar backbone durante entrenamiento')
-    parser.add_argument('--fine_tune_epochs', type=int, default=8,
+    parser.add_argument('--fine_tune_epochs', type=int, default=15,
                        help='Épocas de fine-tuning')
-    parser.add_argument('--fine_tune_lr', type=float, default=0.00005,
+    parser.add_argument('--fine_tune_lr', type=float, default=0.00001,
                        help='Tasa de aprendizaje para fine-tuning')
     parser.add_argument('--loss_type', type=str, default='focal',
                        help='Tipo de función de pérdida')
     parser.add_argument('--device', type=str, default='auto',
-                       choices=['auto', 'cuda', 'cpu'],
-                       help='Dispositivo a usar')
+                       choices=['auto', 'cuda', 'cpu', 'dml'],
+                       help='Dispositivo a usar (auto, cuda, cpu o dml para AMD)')
     parser.add_argument('--output_dir', type=str, default='results/models/multilabel',
                        help='Directorio para guardar resultados')
     
@@ -464,7 +471,22 @@ def main():
     
     # Configurar dispositivo
     if args.device == 'auto':
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+            print("✨ Usando NVIDIA CUDA")
+        elif DML_AVAILABLE:
+            device = torch_directml.device()
+            print("✨ Usando AMD DirectML")
+        else:
+            device = torch.device('cpu')
+            print("✨ Usando CPU")
+    elif args.device == 'dml':
+        if DML_AVAILABLE:
+            device = torch_directml.device()
+            print("✨ Usando AMD DirectML forzado")
+        else:
+            print("❌ Error: torch_directml no está instalado. Usando CPU...")
+            device = torch.device('cpu')
     else:
         device = torch.device(args.device)
     
@@ -551,6 +573,20 @@ def main():
     }, pre_ft_path)
     print(f"\n💾 Checkpoint pre fine-tuning guardado en: {pre_ft_path}")
     
+    # LIMPIEZA EXPLÍCITA DE MEMORIA ANTES DEL FINE-TUNING
+    import gc
+    del train_loader
+    del val_loader
+    gc.collect()
+    
+    # Vaciar caché de GPU si es posible
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+    elif 'privateuseone' in str(device): # DirectML usa este nombre a veces
+        # Para DirectML no hay una función estandarizada de empty_cache igual a CUDA, 
+        # pero gc.collect() ayuda mucho a liberar referencias
+        pass
+
     # Fine-tuning (opcional) con manejo de errores para conservar el pre-FT
     if args.fine_tune_epochs > 0 and args.freeze_backbone:
         try:
@@ -563,7 +599,7 @@ def main():
             
             # Re-crear DataLoaders para fine-tuning con batch_size fijo de 8
             print(f"🔁 Re-creando DataLoaders para fine-tuning con batch_size=8 ...")
-            train_loader_ft, val_loader_ft, test_loader_ft, _ = create_data_loaders(
+            train_loader, val_loader, test_loader, _ = create_data_loaders(
                 data_dir=args.data_dir,
                 train_transform=train_transform,
                 val_transform=val_transform,
@@ -574,8 +610,8 @@ def main():
 
             fine_tune_history = train_model(
                 model=model,
-                train_loader=train_loader_ft,
-                val_loader=val_loader_ft,
+                train_loader=train_loader,
+                val_loader=val_loader,
                 num_epochs=args.fine_tune_epochs,
                 learning_rate=fine_tune_lr,
                 disease_names=disease_names,
