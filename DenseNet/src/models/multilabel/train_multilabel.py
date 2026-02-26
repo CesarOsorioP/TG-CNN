@@ -678,14 +678,30 @@ def main():
         'disease_names': disease_names,
         'dataset_stats': dataset_stats,
         'test_metrics': test_metrics,
-        'optimal_thresholds': optimal_thresholds,  # NUEVO
-        'thresholds_comparison': thresholds_comparison,  # NUEVO
+        'optimal_thresholds': optimal_thresholds,
+        'thresholds_comparison': thresholds_comparison,
         'timestamp': datetime.now().isoformat()
     }
+
+    # Limpiar config para evitar errores de serialización de NumPy
+    def convert_numpy(obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {k: convert_numpy(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy(i) for i in obj]
+        return obj
+
+    config_clean = convert_numpy(config)
     
     config_path = os.path.join(args.output_dir, 'training_config.json')
     with open(config_path, 'w', encoding='utf-8') as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+        json.dump(config_clean, f, indent=2, ensure_ascii=False)
     
     print(f"\n✅ Entrenamiento completado!")
     print(f"📁 Resultados guardados en: {args.output_dir}")

@@ -67,14 +67,14 @@ class SingleLabelChestXrayDataset(Dataset):
         """
         Cargar todas las imágenes y crear etiquetas single-label desde la estructura train/val/test.
         """
-        print(f"🔄 Cargando datos single-label para split '{self.split}'...")
+        print(f"Cargando datos single-label para split '{self.split}'...")
         
         for disease in self.disease_names:
             # Usar la nueva estructura con subcarpetas
             disease_dir = os.path.join(self.data_dir, disease, self.split)
             
             if not os.path.exists(disease_dir):
-                print(f"⚠️  Advertencia: Directorio {disease_dir} no encontrado")
+                print(f"Advertencia: Directorio {disease_dir} no encontrado")
                 continue
             
             # Obtener archivos de imagen
@@ -83,7 +83,7 @@ class SingleLabelChestXrayDataset(Dataset):
                 if file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif')):
                     image_files.append(file)
             
-            print(f"📁 {disease} ({self.split}): {len(image_files)} imágenes")
+            print(f"{disease} ({self.split}): {len(image_files)} imágenes")
             
             # Crear etiquetas single-label (índice de clase) para cada imagen
             disease_idx = self.disease_to_idx[disease]
@@ -93,14 +93,14 @@ class SingleLabelChestXrayDataset(Dataset):
                 # Etiqueta es solo el índice de la clase (no one-hot)
                 self.labels.append(disease_idx)
         
-        print(f"✅ Total de imágenes cargadas: {len(self.images)}")
+        print(f"Total de imágenes cargadas: {len(self.images)}")
         self._print_class_distribution()
     
     def _print_class_distribution(self):
         """
         Imprimir distribución de clases.
         """
-        print("\n📊 Distribución de clases:")
+        print("\nDistribución de clases:")
         label_counts = Counter(self.labels)
         for idx, disease in self.idx_to_disease.items():
             count = label_counts.get(idx, 0)
@@ -274,7 +274,7 @@ def create_data_loaders(data_dir, train_transform, val_transform,
         pin_memory=True
     )
     
-    print(f"\n📊 División del dataset:")
+    print(f"\nDivisión del dataset:")
     print(f"  Entrenamiento: {len(train_dataset):,} imágenes")
     print(f"  Validación: {len(val_dataset):,} imágenes")
     print(f"  Prueba: {len(test_dataset):,} imágenes")

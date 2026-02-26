@@ -64,23 +64,23 @@ class DenseNetSingleLabelClassifier(nn.Module):
         # Inicializar pesos del clasificador
         self._initialize_classifier_weights()
         
-        print(f"✅ Modelo single-label inicializado:")
-        print(f"   📊 Clases: {num_classes}")
-        print(f"   🔒 Backbone congelado: {freeze_backbone}")
-        print(f"   🧠 Características: {num_features}")
-        print(f"   🎯 Capa oculta: {hidden_size}")
+        print(f"Modelo single-label inicializado:")
+        print(f"   Clases: {num_classes}")
+        print(f"   Backbone congelado: {freeze_backbone}")
+        print(f"   Características: {num_features}")
+        print(f"   Capa oculta: {hidden_size}")
     
     def _freeze_backbone(self):
         """Congelar todos los parámetros del backbone."""
         for param in self.backbone.parameters():
             param.requires_grad = False
-        print("🔒 Backbone congelado - solo se entrenará el clasificador")
+        print("Backbone congelado - solo se entrenara el clasificador")
     
     def unfreeze_backbone(self):
         """Descongelar el backbone para fine-tuning."""
         for param in self.backbone.parameters():
             param.requires_grad = True
-        print("🔓 Backbone descongelado - fine-tuning habilitado")
+        print("Backbone descongelado - fine-tuning habilitado")
     
     def _initialize_classifier_weights(self):
         """
@@ -160,7 +160,7 @@ class DenseNetSingleLabelClassifier(nn.Module):
         info = self.get_model_info()
         
         print("\n" + "="*50)
-        print("🤖 INFORMACIÓN DEL MODELO SINGLE-LABEL")
+        print("INFORMACIÓN DEL MODELO SINGLE-LABEL")
         print("="*50)
         print(f"Total de parámetros: {info['total_parameters']:,}")
         print(f"Parámetros entrenables: {info['trainable_parameters']:,}")

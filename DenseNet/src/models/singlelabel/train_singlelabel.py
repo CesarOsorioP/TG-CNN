@@ -19,6 +19,13 @@ import argparse
 from pathlib import Path
 import torch.nn.functional as F
 
+# Intentar importar DirectML para GPUs AMD
+try:
+    import torch_directml
+    DML_AVAILABLE = True
+except ImportError:
+    DML_AVAILABLE = False
+
 # Importar módulos del proyecto
 try:
     from .dataset import create_data_loaders
@@ -38,7 +45,7 @@ def get_transforms():
         tuple: (train_transform, val_transform)
     """
     train_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((320, 320)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(10),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
@@ -49,7 +56,7 @@ def get_transforms():
     ])
     
     val_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((320, 320)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                            std=[0.229, 0.224, 0.225])
@@ -254,11 +261,11 @@ def train_model(model, train_loader, val_loader, num_epochs, learning_rate,
     patience_counter = 0
     min_delta = 0.1  # Mejora mínima del 0.1% en accuracy
     
-    print(f"🚀 Iniciando entrenamiento single-label...")
-    print(f"📊 Épocas: {num_epochs}")
-    print(f"📈 Learning rate: {learning_rate}")
-    print(f"💻 Dispositivo: {device}")
-    print(f"🎯 Función de pérdida: {loss_type}")
+    print(f"Iniciando entrenamiento single-label...")
+    print(f"Épocas: {num_epochs}")
+    print(f"Learning rate: {learning_rate}")
+    print(f"Dispositivo: {device}")
+    print(f"Función de pérdida: {loss_type}")
     
     for epoch in range(num_epochs):
         print(f"\n{'='*60}")
@@ -396,26 +403,26 @@ def main():
                        help='Directorio con datos single-label')
     parser.add_argument('--batch_size', type=int, default=16,
                        help='Tamaño del lote')
-    parser.add_argument('--num_epochs', type=int, default=25,
+    parser.add_argument('--num_epochs', type=int, default=15,
                        help='Número de épocas')
-    parser.add_argument('--learning_rate', type=float, default=0.0005,
+    parser.add_argument('--learning_rate', type=float, default=0.0003,
                        help='Tasa de aprendizaje para backbone congelado')
     parser.add_argument('--freeze_backbone', action='store_true', default=True,
                        help='Congelar backbone durante entrenamiento')
-    parser.add_argument('--fine_tune_epochs', type=int, default=8,
+    parser.add_argument('--fine_tune_epochs', type=int, default=15,
                        help='Épocas de fine-tuning')
-    parser.add_argument('--fine_tune_lr', type=float, default=0.00005,
+    parser.add_argument('--fine_tune_lr', type=float, default=0.00001,
                        help='Tasa de aprendizaje para fine-tuning')
     parser.add_argument('--loss_type', type=str, default='weighted_focal',
                        choices=['ce', 'weighted_ce', 'focal', 'weighted_focal'],
                        help='Tipo de función de pérdida')
-    parser.add_argument('--gamma', type=float, default=2.0,
+    parser.add_argument('--gamma', type=float, default=2.5,
                        help='Factor gamma para Focal Loss (mayor = más enfoque en ejemplos difíciles)')
     parser.add_argument('--alpha', type=float, default=None,
                        help='Peso alpha para Focal Loss (opcional, para balance adicional)')
     parser.add_argument('--device', type=str, default='auto',
-                       choices=['auto', 'cuda', 'cpu'],
-                       help='Dispositivo a usar')
+                       choices=['auto', 'cuda', 'cpu', 'dml'],
+                       help='Dispositivo a usar (auto, cuda, cpu o dml para AMD)')
     parser.add_argument('--output_dir', type=str, default='results/models/singlelabel',
                        help='Directorio para guardar resultados')
     
@@ -423,35 +430,50 @@ def main():
     
     # Configurar dispositivo
     if args.device == 'auto':
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+            print("Usando NVIDIA CUDA")
+        elif DML_AVAILABLE:
+            device = torch_directml.device()
+            print("Usando AMD DirectML")
+        else:
+            device = torch.device('cpu')
+            print("Usando CPU")
+    elif args.device == 'dml':
+        if DML_AVAILABLE:
+            device = torch_directml.device()
+            print("Usando AMD DirectML forzado")
+        else:
+            print("Error: torch_directml no está instalado. Usando CPU...")
+            device = torch.device('cpu')
     else:
         device = torch.device(args.device)
     
-    print("🚀 ENTRENAMIENTO DE MODELO SINGLE-LABEL")
+    print("ENTRENAMIENTO DE MODELO SINGLE-LABEL")
     print("="*60)
-    print(f"📁 Directorio de datos: {args.data_dir}")
-    print(f"📊 Tamaño de lote: {args.batch_size}")
-    print(f"🔄 Épocas: {args.num_epochs}")
-    print(f"📈 Learning rate: {args.learning_rate}")
-    print(f"🔒 Backbone congelado: {args.freeze_backbone}")
-    print(f"💻 Dispositivo: {device}")
-    print(f"🎯 Función de pérdida: {args.loss_type}")
+    print(f"Directorio de datos: {args.data_dir}")
+    print(f"Tamaño de lote: {args.batch_size}")
+    print(f"Épocas: {args.num_epochs}")
+    print(f"Learning rate: {args.learning_rate}")
+    print(f"Backbone congelado: {args.freeze_backbone}")
+    print(f"Dispositivo: {device}")
+    print(f"Función de pérdida: {args.loss_type}")
     if args.loss_type in ['focal', 'weighted_focal']:
-        print(f"📊 Gamma (Focal Loss): {args.gamma}")
+        print(f"Gamma (Focal Loss): {args.gamma}")
         if args.alpha is not None:
-            print(f"📊 Alpha (Focal Loss): {args.alpha}")
+            print(f"Alpha (Focal Loss): {args.alpha}")
     
     # Verificar directorio de datos
     if not os.path.exists(args.data_dir):
-        print(f"❌ Error: Directorio {args.data_dir} no encontrado")
-        print("💡 Ejecuta primero: python src/models/multilabel/prepare_data.py")
+        print(f"Error: Directorio {args.data_dir} no encontrado")
+        print("Ejecuta primero: python src/models/multilabel/prepare_data.py")
         return
     
     # Obtener transformaciones
     train_transform, val_transform = get_transforms()
     
     # Crear DataLoaders
-    print(f"\n📊 Preparando datos...")
+    print(f"\nPreparando datos...")
     train_loader, val_loader, test_loader, dataset_stats = create_data_loaders(
         data_dir=args.data_dir,
         train_transform=train_transform,
@@ -468,7 +490,7 @@ def main():
     ]
     
     # Crear modelo
-    print(f"\n🤖 Creando modelo...")
+    print(f"\nCreando modelo...")
     model = create_model(
         num_classes=len(class_names),
         pretrained=True,
@@ -490,10 +512,10 @@ def main():
         temp_dataset = SingleLabelChestXrayDataset(args.data_dir, transform=None)
         class_weights = temp_dataset.get_class_weights()
         class_weights = class_weights.to(device)
-        print(f"📊 Pesos de clase calculados: {class_weights}")
+        print(f"Pesos de clase calculados: {class_weights}")
     
     # Entrenar modelo
-    print(f"\n🏋️ Iniciando entrenamiento...")
+    print(f"\nIniciando entrenamiento...")
     history = train_model(
         model=model,
         train_loader=train_loader,
@@ -520,6 +542,18 @@ def main():
     }, pre_ft_path)
     print(f"\n💾 Checkpoint pre fine-tuning guardado en: {pre_ft_path}")
     
+    # LIMPIEZA EXPLÍCITA DE MEMORIA ANTES DEL FINE-TUNING
+    import gc
+    del train_loader
+    del val_loader
+    gc.collect()
+    
+    # Vaciar caché de GPU si es posible
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+    elif 'privateuseone' in str(device): # DirectML usa este nombre a veces
+        pass
+
     # Fine-tuning (opcional)
     if args.fine_tune_epochs > 0 and args.freeze_backbone:
         try:
@@ -535,7 +569,7 @@ def main():
                 data_dir=args.data_dir,
                 train_transform=train_transform,
                 val_transform=val_transform,
-                batch_size=12,
+                batch_size=8,
                 include_normal=True,
                 num_workers=0
             )
