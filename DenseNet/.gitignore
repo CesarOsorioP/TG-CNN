@@ -21,8 +21,11 @@
 .venv
 /scripts/PredicciónImágenes
 /data
+/results/models/Chest_xray_model
 README.md
 __pycache__
+densenet_multilabel_model.pth
+densenet_chest_xray_model.pth
 
 npm-debug.log*
 yarn-debug.log*

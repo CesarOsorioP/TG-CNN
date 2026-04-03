@@ -15,13 +15,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
+from sklearn.metrics import f1_score
 
 # Importar módulos del proyecto
 from dataset import create_data_loaders
 from model import create_model
 from metrics import MultiLabelMetrics, evaluate_model_multi_label
 
-def evaluate_model_comprehensive(model, test_loader, disease_names, device='cuda', threshold=0.5):
+def evaluate_model_comprehensive(model, test_loader, disease_names, device='cuda', threshold=0.5, optimal_thresholds=None):
     """
     Evaluación comprehensiva del modelo multi-label.
     
@@ -39,7 +40,7 @@ def evaluate_model_comprehensive(model, test_loader, disease_names, device='cuda
     
     # Evaluación básica
     metrics, predictions, targets, probabilities = evaluate_model_multi_label(
-        model, test_loader, disease_names, device, threshold
+        model, test_loader, disease_names, device, threshold, optimal_thresholds=optimal_thresholds
     )
     
     # Análisis adicional
@@ -62,6 +63,20 @@ def evaluate_model_comprehensive(model, test_loader, disease_names, device='cuda
             'auc': metrics['auc_per_class'][i] if 'auc_per_class' in metrics else None
         }
         analysis['detailed_analysis'][disease] = disease_metrics
+        
+        # Calcular matriz de confusión (Layout pedido: Q1=FP, Q2=TP, Q3=FN, Q4=TN)
+        y_true_i = targets[:, i]
+        y_pred_i = predictions[:, i]
+        
+        tp = int(np.sum((y_true_i == 1) & (y_pred_i == 1)))
+        fp = int(np.sum((y_true_i == 0) & (y_pred_i == 1)))
+        fn = int(np.sum((y_true_i == 1) & (y_pred_i == 0)))
+        tn = int(np.sum((y_true_i == 0) & (y_pred_i == 0)))
+        
+        analysis['confusion_matrices'][disease] = {
+            'TP': tp, 'FP': fp,
+            'FN': fn, 'TN': tn
+        }
     
     # Análisis de errores
     print("🔍 Analizando errores de clasificación...")
@@ -259,6 +274,65 @@ def plot_evaluation_results(analysis, disease_names, save_dir=None):
         
         plt.show()
 
+    # Gráfico 4: Matrices de Confusión Multi-label
+    if 'confusion_matrices' in analysis and analysis['confusion_matrices']:
+        import math
+        
+        n_diseases = len(disease_names)
+        cols = 4 if n_diseases >= 4 else n_diseases
+        rows = math.ceil(n_diseases / cols)
+        
+        fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))
+        if n_diseases == 1:
+            axes = np.array([axes])
+        axes = axes.flatten()
+        
+        for i, disease in enumerate(disease_names):
+            cm_dict = analysis['confusion_matrices'][disease]
+            # Matriz con disposición requerida:
+            # Q2 (arriba izq): TP | Q1 (arriba der): FP
+            # -------------------+-------------------
+            # Q3 (abajo izq): FN  | Q4 (abajo der): TN
+            matrix = np.array([
+                [cm_dict['TP'], cm_dict['FP']],
+                [cm_dict['FN'], cm_dict['TN']]
+            ])
+            
+            ax = axes[i]
+            im = ax.imshow(matrix, cmap='Blues')
+            
+            # Umbral para invertido color de texto si el azul es muy oscuro
+            thresh = matrix.max() / 2.
+            
+            # Añadir las anotaciones de texto
+            ax.text(0, 0, f"TP\n{cm_dict['TP']}", ha="center", va="center", 
+                    color="white" if matrix[0,0] > thresh else "black", fontsize=14, fontweight='bold')
+            ax.text(1, 0, f"FP\n{cm_dict['FP']}", ha="center", va="center", 
+                    color="white" if matrix[0,1] > thresh else "black", fontsize=14, fontweight='bold')
+            ax.text(0, 1, f"FN\n{cm_dict['FN']}", ha="center", va="center", 
+                    color="white" if matrix[1,0] > thresh else "black", fontsize=14, fontweight='bold')
+            ax.text(1, 1, f"TN\n{cm_dict['TN']}", ha="center", va="center", 
+                    color="white" if matrix[1,1] > thresh else "black", fontsize=14, fontweight='bold')
+            
+            # Limpiar bordes/ticks
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_title(f'{disease}', fontsize=14)
+            
+        # Ocultar subplots vacíos
+        for j in range(len(disease_names), len(axes)):
+            axes[j].set_visible(False)
+            
+        fig.suptitle('Matrices de Confusión de Clasificación Multi-label', fontsize=18, fontweight='bold', y=1.02)
+        plt.tight_layout()
+        
+        if save_dir:
+            plot_path = os.path.join(save_dir, 'confusion_matrices.png')
+            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+            print(f"🧮 Matrices de confusión guardadas en: {plot_path}")
+        
+        plt.show()
+
 def print_evaluation_summary(analysis, disease_names):
     """
     Imprimir resumen de evaluación.
@@ -358,6 +432,7 @@ def main():
     checkpoint = torch.load(args.model, map_location=device, weights_only=False)
     disease_names = checkpoint['disease_names']
     num_diseases = checkpoint['num_diseases']
+    optimal_thresholds = checkpoint.get('optimal_thresholds', None)
     
     model = create_model(
         num_diseases=num_diseases,
@@ -368,11 +443,15 @@ def main():
     model.eval()
     
     print(f"✅ Modelo cargado - {num_diseases} enfermedades")
+    if optimal_thresholds:
+        print(f"📊 Umbrales adaptativos encontrados en el checkpoint y se usarán para la evaluación.")
+    else:
+        print(f"⚠️ No se encontraron umbrales adaptativos en el checkpoint, se usará el umbral fijo de {args.threshold}.")
     
     # Preparar datos
     print(f"\n📊 Preparando datos de prueba...")
     val_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((320, 320)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                            std=[0.229, 0.224, 0.225])
@@ -390,7 +469,7 @@ def main():
     # Evaluar modelo
     print(f"\n🔍 Evaluando modelo...")
     analysis = evaluate_model_comprehensive(
-        model, test_loader, disease_names, device, args.threshold
+        model, test_loader, disease_names, device, args.threshold, optimal_thresholds=optimal_thresholds
     )
     
     # Imprimir resultados

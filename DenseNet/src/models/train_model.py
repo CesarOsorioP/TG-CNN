@@ -19,6 +19,18 @@ from tqdm import tqdm
 import json
 from datetime import datetime
 
+def get_device():
+    """Detectar el mejor dispositivo disponible (CUDA, DirectML para AMD, o CPU)."""
+    if torch.cuda.is_available():
+        return torch.device('cuda')
+    
+    # Intentar usar DirectML (Soporte nativo para AMD Radeon RX 580 en Windows)
+    try:
+        import torch_directml
+        return torch_directml.device()
+    except ImportError:
+        return torch.device('cpu')
+
 class ChestXrayDataset(Dataset):
     """
     Dataset personalizado para radiografías de tórax.
@@ -121,7 +133,7 @@ def get_transforms():
     """Obtener transformaciones de datos para entrenamiento y validación."""
     
     train_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((320, 320)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(10),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
@@ -131,7 +143,7 @@ def get_transforms():
     ])
     
     val_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((320, 320)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                            std=[0.229, 0.224, 0.225])
@@ -151,7 +163,7 @@ def train_model(model, train_loader, val_loader, num_epochs=20, learning_rate=0.
         learning_rate: Tasa de aprendizaje
     """
     
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = get_device()
     model = model.to(device)
     
     # Función de pérdida y optimizador
@@ -304,7 +316,7 @@ def plot_training_history(history, save_path=None):
 def evaluate_model(model, test_loader, class_names):
     """Evaluar el modelo en el conjunto de prueba."""
     
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = get_device()
     model = model.to(device)
     model.eval()
     
@@ -339,58 +351,112 @@ def evaluate_model(model, test_loader, class_names):
     
     return all_predictions, all_targets
 
+def organize_data_splits(data_dir, train_split=0.7, val_split=0.15, test_split=0.15):
+    """Organiza automáticamente las carpetas en subdirectorios train, val, test."""
+    import shutil
+    import random
+    
+    classes = ['chest_xray', 'other_images']
+    
+    # Comprobar si ya están organizadas
+    if os.path.exists(os.path.join(data_dir, 'train', classes[0])):
+        return True
+        
+    print("📁 Organizando automáticamente las imágenes en directorios train/val/test...")
+    
+    # Verificar carpetas maestras
+    for cls in classes:
+        src = os.path.join(data_dir, cls)
+        if not os.path.exists(src):
+            print(f"❌ Error crítico: Falta la carpeta base {src}")
+            return False
+            
+    # Crear estructura física
+    for split in ['train', 'val', 'test']:
+        for cls in classes:
+            os.makedirs(os.path.join(data_dir, split, cls), exist_ok=True)
+            
+    # Distribuir archivos de manera aleatoria pero reproducible
+    for cls in classes:
+        src = os.path.join(data_dir, cls)
+        files = [f for f in os.listdir(src) if os.path.isfile(os.path.join(src, f))]
+        files = [f for f in files if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
+        
+        random.seed(42)
+        random.shuffle(files)
+        
+        n_total = len(files)
+        n_train = int(n_total * train_split)
+        n_val = int(n_total * val_split)
+        
+        train_f = files[:n_train]
+        val_f = files[n_train:n_train+n_val]
+        test_f = files[n_train+n_val:]
+        
+        print(f"  ➜ {cls} -> {len(train_f)} a train, {len(val_f)} a val, {len(test_f)} a test")
+        
+        for f in train_f: shutil.move(os.path.join(src, f), os.path.join(data_dir, 'train', cls, f))
+        for f in val_f: shutil.move(os.path.join(src, f), os.path.join(data_dir, 'val', cls, f))
+        for f in test_f: shutil.move(os.path.join(src, f), os.path.join(data_dir, 'test', cls, f))
+        
+        try:
+            os.rmdir(src)
+        except OSError:
+            pass
+            
+    print("✅ Separación completada correctamente.")
+    return True
+
 def main():
     """Función principal para entrenar el modelo."""
+    
+    print("\n" + "="*50)
+    print("🔍 VERIFICACIÓN DE HARDWARE")
+    device = get_device()
+    if device.type == 'cpu':
+        print("⚠️ ATENCIÓN: Se usará el procesador (CPU) lo cual es más lento.")
+        print("   Para activar la aceleración de tu AMD Radeon RX 580, necesitas")
+        print("   utilizar Python 3.10 e instalar el motor 'torch-directml':")
+        print("   ejecuta -> pip install torch-directml")
+    else:
+        print("✅ Aceleración por tarjeta gráfica activada exitosamente.")
+    print("="*50 + "\n")
     
     # Configuración optimizada para datasets pequeños (~1200 imágenes)
     DATA_DIR = "data"  # Directorio con las imágenes
     BATCH_SIZE = 16    # Reducido para datasets pequeños
-    NUM_EPOCHS = 3    # Aumentado para compensar el freeze
-    LEARNING_RATE = 0.001
+    NUM_EPOCHS = 5    # Aumentado para compensar el freeze
+    LEARNING_RATE = 0.0001
     TRAIN_SPLIT = 0.7
     VAL_SPLIT = 0.15
     TEST_SPLIT = 0.15
     FREEZE_BACKBONE = True  # Congelar backbone para evitar overfitting
-    FINE_TUNE_EPOCHS = 5    # Épocas adicionales con fine-tuning (opcional)
+    FINE_TUNE_EPOCHS = 3    # Épocas adicionales con fine-tuning (opcional)
     
-    # Verificar que existe el directorio de datos
+    # Verificar que existe el directorio base de datos
     if not os.path.exists(DATA_DIR):
         print(f"Error: Directorio {DATA_DIR} no encontrado.")
-        print("Por favor, crea la siguiente estructura:")
+        print("Por favor, crea la siguiente estructura inicial:")
         print("data/")
         print("├── chest_xray/     # Imágenes de radiografías de tórax")
         print("└── other_images/   # Otras imágenes (no radiografías)")
+        return
+        
+    # Organizar directorios si no se ha hecho
+    if not organize_data_splits(DATA_DIR, TRAIN_SPLIT, VAL_SPLIT, TEST_SPLIT):
         return
     
     # Obtener transformaciones
     train_transform, val_transform = get_transforms()
     
-    # Crear dataset completo
-    full_dataset = ChestXrayDataset(DATA_DIR, transform=None)
+    # Cargar datasets en memoria usando las nuevas carpetas individuales
+    train_dataset = ChestXrayDataset(os.path.join(DATA_DIR, 'train'), transform=train_transform)
+    val_dataset = ChestXrayDataset(os.path.join(DATA_DIR, 'val'), transform=val_transform)
+    test_dataset = ChestXrayDataset(os.path.join(DATA_DIR, 'test'), transform=val_transform)
     
-    if len(full_dataset) == 0:
-        print("No se encontraron imágenes en el directorio especificado.")
+    if len(train_dataset) == 0:
+        print("No se encontraron imágenes en el directorio de entrenamiento.")
         return
-    
-    # Dividir dataset
-    dataset_size = len(full_dataset)
-    train_size = int(TRAIN_SPLIT * dataset_size)
-    val_size = int(VAL_SPLIT * dataset_size)
-    test_size = dataset_size - train_size - val_size
-    
-    train_indices = list(range(train_size))
-    val_indices = list(range(train_size, train_size + val_size))
-    test_indices = list(range(train_size + val_size, dataset_size))
-    
-    # Crear datasets divididos
-    train_dataset = torch.utils.data.Subset(full_dataset, train_indices)
-    val_dataset = torch.utils.data.Subset(full_dataset, val_indices)
-    test_dataset = torch.utils.data.Subset(full_dataset, test_indices)
-    
-    # Aplicar transformaciones
-    train_dataset.dataset.transform = train_transform
-    val_dataset.dataset.transform = val_transform
-    test_dataset.dataset.transform = val_transform
     
     # Crear DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
@@ -436,8 +502,8 @@ def main():
     model_path = "densenet_chest_xray_model.pth"
     torch.save({
         'model_state_dict': model.state_dict(),
-        'class_to_idx': full_dataset.class_to_idx,
-        'idx_to_class': full_dataset.idx_to_class,
+        'class_to_idx': train_dataset.class_to_idx,
+        'idx_to_class': train_dataset.idx_to_class,
         'history': history
     }, model_path)
     print(f"\nModelo guardado en: {model_path}")
